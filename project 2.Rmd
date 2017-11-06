@@ -1,0 +1,143 @@
+---
+title: "Air and Sea Temperature in Europe Atlantic"
+author: "Shuai Dong, Ran Tao, Yuan Yuan, Yitong Zhang"
+date: "November 5, 2017"
+output:
+  pdf_document: default
+---
+```{r Set up Environment, include = FALSE}
+
+knitr::opts_chunk$set(message = FALSE)    # No messages
+knitr::opts_chunk$set(warning = FALSE)    # No warnings
+options(digits = 2)                       # 2 decimals
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(lubridate)
+library(dplyr)
+library(data.table)
+library(ggmap)
+library(maps)
+library(mapdata)
+
+```
+
+
+```{r,include=FALSE}
+temperature0<-read.csv("Alldata.csv")
+
+#select one data each day
+temperature<-temperature0[!duplicated(temperature0[c("YR","MO","DY")]),]
+
+#time difference
+temperature$HR<-temperature$HR/100
+temperature$difference<-temperature$HR-12
+
+#latitude
+temperature$LAT<-temperature$LAT/100
+
+#day&time
+temperature$time<-make_datetime(year = temperature$YR, month = temperature$MO,day = temperature$DY,hour = temperature$HR, tz = "UTC")
+
+#region name
+temperature$regionname<-5
+
+#type reading
+temperature$typereading<-"ship"
+
+#creat table
+table<-data.frame(temperature$regionname,temperature$typereading,temperature$difference,temperature$time,temperature$LAT,temperature$LON,temperature$SST,temperature$AT)
+colnames(table)<- c("team_num","reading_type","time_diff","date_time","Lat","Lon","sea_temp","air_temp")
+table$time_diff<-ifelse(abs(table$time_diff)>6,"A",table$time_diff)
+table<-dplyr::filter(table, time_diff!="A")
+
+```
+
+
+
+\section{1. Data Overview}
+
+In this project, we are hoping to explore the change of air tempemture and sea temperature within the area of Europe Atlantic from year 2001 to year 2017. 
+
+When we look for relevant data from buoy stations within the area, the majority of stations do not have historical data. For this reason, we choose to use ships data reported in our region instead.
+
+During the data cleaning process, we find out that we do not have complete data for every single month and every single day from 2001 to 2017. Besides, sea temperature data contains a lot of NAs. Moreover, some data cannot meet our requirements, because the time interval we require for data collection has to be within 6 hours of noon. 
+Due to the above constraints, the data that are applicable and useful is relatively limited.
+
+#1.1 Available Data
+```{r,echo=FALSE}
+table$year <- year(table$date_time)
+n <- table%>%group_by(year)%>%summarise(n=n())
+t1 <- kable(t(n[1:8,]),caption = "Number of Temperature Data per Year" ,align = "l")
+t2 <- kable(t(n[9:17,]),align = "l")
+t1
+t2
+```
+
+#1.2 Data Sources
+```{r,echo=FALSE}
+bc_bbox <- make_bbox(lon = Lon, lat = Lat, data = table)
+bc_big <- get_map(location = bc_bbox, source = "google", maptype = "terrain")
+
+ggmap(bc_big)+geom_point(data=table, mapping =aes(x=Lon,y=Lat,color=year))+labs(title = "Data Sources Location")+ theme(plot.title = element_text(hjust = 0.5))
+```
+
+URL: https://www1.ncdc.noaa.gov/pub/data/vosclim/
+
+\section{2. Air Temperature} 
+```{r,echo=FALSE}
+avg_AT <- table%>%group_by(year)%>%summarise(sum(na.omit(air_temp))/length(na.omit(air_temp)))
+colnames(avg_AT) <- c("year","avg_AT")
+ggplot(avg_AT,aes(year,avg_AT,fill=year))+geom_col()+labs(y="average air temperature",title="Average Air Temperature by Year")+ theme(plot.title = element_text(hjust = 0.5))
+
+stat.AT <- c(summary(avg_AT$avg_AT))
+kable(t(stat.AT),caption = "Summary of Average Air Temperature" ,align = "l")
+
+
+avg_AT$n <- n$n
+ggplot(avg_AT,aes(year,n,fill=year))+geom_col()+labs(y="sample size",title="Air Temperature Sample Size by Year")+ theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r,echo=FALSE}
+ggplot(table)+geom_boxplot(aes(year,air_temp,group= year,colour= year))+labs(y="air temperature", title="Air Temperature by Year")+theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+The histogram above shows the average air temperature in Europe Atlantic from year 2001 to year 2017. The boxplot shows the general distribution of air temperature each year. The avarage air temperature does not vary much throughout the years except in the first few years. However, if we look into the sample size for each year, we can discover that the sample size of the first few years are extremely limited. Therefore, the fluctuate of average air temperature could be due to the limited sample size rather than climate reasons. The fact that from year 2013 to year 2017, when we have abundant sample, the average air temperature does not show a hugh difference also justify our former conclusion.
+
+
+\section{3. Sea Temperature}
+```{r,echo=FALSE}
+avg_ST <- table%>%group_by(year)%>%summarise(sum(na.omit(sea_temp))/length(na.omit(sea_temp)))
+colnames(avg_ST) <- c("year","avg_ST")
+ggplot(avg_ST,aes(year,avg_ST,fill=year))+geom_col()+labs(y="average sea temperature",title="Average Sea Temperature by Year")+ theme(plot.title = element_text(hjust = 0.5))
+
+stat.ST <- c(summary(avg_ST$avg_ST))
+kable(t(stat.AT),caption = "Summary of Average Sea Temperature" ,align = "l")
+```
+
+```{r,echo=FALSE}
+ggplot(table)+geom_boxplot(aes(year,sea_temp,group= year,colour= year))+labs(y="sea temperature", title="Sea Temperature by Year")+theme(plot.title = element_text(hjust = 0.5))
+
+dta.ST <- na.omit(table)
+m <- dta.ST%>%group_by(year)%>%summarise(n=n())
+
+avg_ST$n <- m$n
+ggplot(avg_ST,aes(year,n,fill=year))+geom_col()+labs(y="sample size",title="Sea Temperature Sample Size by Year")+ theme(plot.title = element_text(hjust = 0.5))
+```
+
+The problem we have for our sea temperature data is similiar with what we have for the air temperature data. Besides, we have even fewer data points. Still, we are able to conclude that the average sea temperature does not vary much from year 2012 to year 2017 when we have more sample. 
+
+\section{4. Air Temperature and Sea temperature}
+```{r,echo=FALSE}
+colnames(avg_ST)[3] <- "m"
+
+avg_T <- merge(avg_AT,avg_ST,all = TRUE)
+avg_T$sample.size <- avg_T$n+avg_T$m
+ggplot(avg_T,aes(avg_AT,avg_ST,size=sample.size))+geom_jitter(height = 2,width = 4)+labs(x="average air temperature",y="average sea temperature",title= "Average Sea Temperature versus Average Air Temperature")+theme(plot.title = element_text(hjust = 0.5))
+```
+
+Last but not the least, we plot each years average air temperature and their average sea temperature. We were hoping to that the the years with more sample size could show somewhat a pattern in the graph, but actually we cannot tell that from our plot.
+
+Although our exploration does not show much about the change of air and sea temperature within Europe Atlantic area, it does not mean that there actually is no changes. The data we have is limited, and due to the nature of ships data, we use data reported from very different locations each time within the whole area, which all could contribute to inaccurate analysis. Therefore, if we could have a fuller dataset, we might be able to reveal some patterns of air and sea temperature data within Europe Atlantic.
+
